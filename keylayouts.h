@@ -110,6 +110,77 @@
 #include <stdint.h>
 #include <avr/pgmspace.h>
 
+// Keyboard layouts compiled into update_keyboard_layout() (keylayouts.c). Selected at
+// runtime via KeyboardLayout[0], but each block only exists in the built firmware if its
+// flag is defined below - unselected layouts silently type nothing (safe no-op), not wrong
+// characters. LAYOUT_USA_ENGLISH/LAYOUT_DVORAK(base)/uninitialized(0x00) fallback is always
+// compiled.
+//
+// This file is a core file (copied into cores/teensy3 at build time) and is compiled
+// without the onlykey library's include path, so it can't see onlykey.h's #define DEBUG
+// directly. KEYLAYOUTS_DEBUG_BUILD mirrors it by hand instead - keep it in sync manually:
+// defined (debug/dev builds) => only the layout(s) explicitly uncommented below are
+// compiled in, to leave flash headroom for debug instrumentation; undefined (release
+// builds) => every layout below is compiled in automatically, full international support.
+#define KEYLAYOUTS_DEBUG_BUILD // comment this out (to match #undef DEBUG in onlykey.h) for a release build
+
+#ifdef KEYLAYOUTS_DEBUG_BUILD
+//#define SUPPORT_LAYOUT_DVORAK
+//#define SUPPORT_LAYOUT_US_INTERNATIONAL
+//#define SUPPORT_LAYOUT_GERMAN
+//#define SUPPORT_LAYOUT_GERMAN_MAC
+//#define SUPPORT_LAYOUT_CANADIAN_FRENCH
+//#define SUPPORT_LAYOUT_CANADIAN_MULTILINGUAL
+//#define SUPPORT_LAYOUT_UNITED_KINGDOM
+//#define SUPPORT_LAYOUT_FINNISH
+//#define SUPPORT_LAYOUT_FRENCH
+//#define SUPPORT_LAYOUT_DANISH
+//#define SUPPORT_LAYOUT_NORWEGIAN
+//#define SUPPORT_LAYOUT_SWEDISH
+//#define SUPPORT_LAYOUT_SPANISH
+//#define SUPPORT_LAYOUT_PORTUGUESE
+//#define SUPPORT_LAYOUT_ITALIAN
+//#define SUPPORT_LAYOUT_PORTUGUESE_BRAZILIAN
+//#define SUPPORT_LAYOUT_FRENCH_BELGIAN
+//#define SUPPORT_LAYOUT_GERMAN_SWISS
+//#define SUPPORT_LAYOUT_FRENCH_SWISS
+//#define SUPPORT_LAYOUT_SPANISH_LATIN_AMERICA
+//#define SUPPORT_LAYOUT_IRISH
+//#define SUPPORT_LAYOUT_ICELANDIC
+//#define SUPPORT_LAYOUT_TURKISH
+//#define SUPPORT_LAYOUT_CZECH
+//#define SUPPORT_LAYOUT_SERBIAN
+//#define SUPPORT_LAYOUT_HUNGARIAN
+#else
+// Release build: compile in every supported layout.
+#define SUPPORT_LAYOUT_DVORAK
+#define SUPPORT_LAYOUT_US_INTERNATIONAL
+#define SUPPORT_LAYOUT_GERMAN
+#define SUPPORT_LAYOUT_GERMAN_MAC
+#define SUPPORT_LAYOUT_CANADIAN_FRENCH
+#define SUPPORT_LAYOUT_CANADIAN_MULTILINGUAL
+#define SUPPORT_LAYOUT_UNITED_KINGDOM
+#define SUPPORT_LAYOUT_FINNISH
+#define SUPPORT_LAYOUT_FRENCH
+#define SUPPORT_LAYOUT_DANISH
+#define SUPPORT_LAYOUT_NORWEGIAN
+#define SUPPORT_LAYOUT_SWEDISH
+#define SUPPORT_LAYOUT_SPANISH
+#define SUPPORT_LAYOUT_PORTUGUESE
+#define SUPPORT_LAYOUT_ITALIAN
+#define SUPPORT_LAYOUT_PORTUGUESE_BRAZILIAN
+#define SUPPORT_LAYOUT_FRENCH_BELGIAN
+#define SUPPORT_LAYOUT_GERMAN_SWISS
+#define SUPPORT_LAYOUT_FRENCH_SWISS
+#define SUPPORT_LAYOUT_SPANISH_LATIN_AMERICA
+#define SUPPORT_LAYOUT_IRISH
+#define SUPPORT_LAYOUT_ICELANDIC
+#define SUPPORT_LAYOUT_TURKISH
+#define SUPPORT_LAYOUT_CZECH
+#define SUPPORT_LAYOUT_SERBIAN
+#define SUPPORT_LAYOUT_HUNGARIAN
+#endif
+
 
 
 #ifdef __cplusplus
