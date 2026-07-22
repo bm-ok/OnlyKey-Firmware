@@ -227,6 +227,8 @@ extern uint8_t stored_key_challenge_mode;
 //Other
 /*************************************/
 extern uint8_t recv_buffer[64];
+extern uint8_t *large_buffer;
+extern int large_buffer_offset;
 char keybuffer[EElen_url+EElen_addchar+EElen_delay+EElen_addchar+EElen_username+EElen_delay+EElen_addchar+EElen_password+EElen_addchar+EElen_2FAtype+64+EElen_addchar+EElen_addchar+10]; //Buffer to hold all keystrokes
 char *pos;
 extern uint8_t isfade;
@@ -837,6 +839,19 @@ void payload(int duration) {
           recvmsg(0);
           }
           u2f_button = 0;
+        } else if (packet_buffer_details[0] == OKSETPRIV) {
+          // PQC (X-Wing/ML-KEM) keygen confirmation: ecc_priv_flash() primed
+          // this challenge via process_packets(), which encrypted the
+          // [keytype, 0xFF x8] trigger payload into large_buffer (see
+          // done_process_packets()) - decrypt it back, rebuild recv_buffer in
+          // the layout set_private()/ecc_priv_flash() expect (buffer[6]=keytype,
+          // buffer[7..]=trigger bytes), and re-run it now that CRYPTO_AUTH==4.
+          okcore_aes_gcm_decrypt(large_buffer, packet_buffer_details[0], packet_buffer_details[1], profilekey, large_buffer_offset);
+          recv_buffer[4] = packet_buffer_details[0];
+          recv_buffer[5] = packet_buffer_details[1];
+          recv_buffer[6] = large_buffer[0];
+          memcpy(recv_buffer + 7, large_buffer + 1, large_buffer_offset - 1);
+          set_private(recv_buffer);
         }
           CRYPTO_AUTH = 0;
           packet_buffer_details[0]=0;
