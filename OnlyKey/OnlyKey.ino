@@ -665,7 +665,7 @@ void payload(int duration) {
             p1hash[i] = 0xFF;
           }
           okcore_flashset_pinhashpublic ((uint8_t*)p1hash); //permanently wipe pinhash
-          okeeprom_eeset_sincelastregularlogin (0);
+          { uint8_t zero = 0; okeeprom_eeset_sincelastregularlogin(&zero); }
        } else {
         sincelastregularlogin[0]++;
         okeeprom_eeset_sincelastregularlogin ((uint8_t*)sincelastregularlogin);
@@ -697,7 +697,11 @@ void payload(int duration) {
    if (unlocked || password.profile1hashevaluate() || password.profile2hashevaluate()) {
     integrityctr2++;
     if (unlocked != true) { //A correct PIN was just entered do the following for first login
-      okeeprom_eeset_failedlogins(0); //Set failed login counter to 0
+      // These setters take a uint8_t* and dereference it; passing 0 is a null
+      // POINTER, not the value zero. It stores zero on the device only because
+      // address 0 is the vector table's initial stack pointer, whose first byte
+      // little-endian is 0x00.
+      { uint8_t zero = 0; okeeprom_eeset_failedlogins(&zero); } //Set failed login counter to 0
       password.reset(); //reset the guessed password to NULL
       session_attempts=0;
       if (!configmode) hidprint(HW_MODEL(UNLOCKED));
@@ -710,7 +714,7 @@ void payload(int duration) {
       if (profilemode!=NONENCRYPTEDPROFILE) {
         #ifdef STD_VERSION
         U2Finit();
-        okeeprom_eeset_sincelastregularlogin(0); //Set failed logins since last regular login to 0
+        { uint8_t zero = 0; okeeprom_eeset_sincelastregularlogin(&zero); } //Set failed logins since last regular login to 0
         fw_version_changes();
         #endif
       }
