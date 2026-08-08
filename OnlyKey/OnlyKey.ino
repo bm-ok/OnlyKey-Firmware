@@ -227,6 +227,8 @@ extern uint8_t stored_key_challenge_mode;
 //Other
 /*************************************/
 extern uint8_t recv_buffer[64];
+extern uint8_t *large_buffer;
+extern int large_buffer_offset;
 char keybuffer[EElen_url+EElen_addchar+EElen_delay+EElen_addchar+EElen_username+EElen_delay+EElen_addchar+EElen_password+EElen_addchar+EElen_2FAtype+64+EElen_addchar+EElen_addchar+10]; //Buffer to hold all keystrokes
 char *pos;
 extern uint8_t isfade;
@@ -663,7 +665,7 @@ void payload(int duration) {
             p1hash[i] = 0xFF;
           }
           okcore_flashset_pinhashpublic ((uint8_t*)p1hash); //permanently wipe pinhash
-          okeeprom_eeset_sincelastregularlogin (0);
+          { uint8_t zero = 0; okeeprom_eeset_sincelastregularlogin(&zero); }
        } else {
         sincelastregularlogin[0]++;
         okeeprom_eeset_sincelastregularlogin ((uint8_t*)sincelastregularlogin);
@@ -695,7 +697,11 @@ void payload(int duration) {
    if (unlocked || password.profile1hashevaluate() || password.profile2hashevaluate()) {
     integrityctr2++;
     if (unlocked != true) { //A correct PIN was just entered do the following for first login
-      okeeprom_eeset_failedlogins(0); //Set failed login counter to 0
+      // These setters take a uint8_t* and dereference it; passing 0 is a null
+      // POINTER, not the value zero. It stores zero on the device only because
+      // address 0 is the vector table's initial stack pointer, whose first byte
+      // little-endian is 0x00.
+      { uint8_t zero = 0; okeeprom_eeset_failedlogins(&zero); } //Set failed login counter to 0
       password.reset(); //reset the guessed password to NULL
       session_attempts=0;
       if (!configmode) hidprint(HW_MODEL(UNLOCKED));
@@ -708,7 +714,7 @@ void payload(int duration) {
       if (profilemode!=NONENCRYPTEDPROFILE) {
         #ifdef STD_VERSION
         U2Finit();
-        okeeprom_eeset_sincelastregularlogin(0); //Set failed logins since last regular login to 0
+        { uint8_t zero = 0; okeeprom_eeset_sincelastregularlogin(&zero); } //Set failed logins since last regular login to 0
         fw_version_changes();
         #endif
       }
@@ -837,6 +843,19 @@ void payload(int duration) {
           recvmsg(0);
           }
           u2f_button = 0;
+        } else if (packet_buffer_details[0] == OKSETPRIV) {
+          // PQC (X-Wing/ML-KEM) keygen confirmation: ecc_priv_flash() primed
+          // this challenge via process_packets(), which encrypted the
+          // [keytype, 0xFF x8] trigger payload into large_buffer (see
+          // done_process_packets()) - decrypt it back, rebuild recv_buffer in
+          // the layout set_private()/ecc_priv_flash() expect (buffer[6]=keytype,
+          // buffer[7..]=trigger bytes), and re-run it now that CRYPTO_AUTH==4.
+          okcore_aes_gcm_decrypt(large_buffer, packet_buffer_details[0], packet_buffer_details[1], profilekey, large_buffer_offset);
+          recv_buffer[4] = packet_buffer_details[0];
+          recv_buffer[5] = packet_buffer_details[1];
+          recv_buffer[6] = large_buffer[0];
+          memcpy(recv_buffer + 7, large_buffer + 1, large_buffer_offset - 1);
+          set_private(recv_buffer);
         }
           CRYPTO_AUTH = 0;
           packet_buffer_details[0]=0;
