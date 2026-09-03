@@ -429,10 +429,14 @@ void setup() {
    if (!initcheck) {
     //Default set to no challenge code required for OnlyKey Agent
     //User can enable challenge code in OnlyKey app preferences
-    derived_key_challenge_mode = 1;
-    stored_key_challenge_mode = 1;
+    derived_key_challenge_mode = USER_INPUT_PRESS;
+    stored_key_challenge_mode = USER_INPUT_PRESS;
     okeeprom_eeset_derived_key_challenge_mode(&derived_key_challenge_mode); 
     okeeprom_eeset_stored_key_challenge_mode(&stored_key_challenge_mode);
+    // Web derived keys: no press by default, the web app chooses per request
+    // (press-free per-site derivation is the OnlyAgent feature).
+    uint8_t webmode = USER_INPUT_NONE;
+    okeeprom_eeset_web_derive_mode(&webmode);
   } 
   
   if (onlykeyhw==OK_HW_DUO) {
@@ -485,6 +489,11 @@ void checkKey(Task* me) {
   if (unlocked) {
     integrityctr2++;
     recvmsg(0);
+    if (pending_op_no_press && CRYPTO_AUTH == 4) {
+      // USER_INPUT_NONE: done_process_packets() staged the operation and asked
+      // for it to run without a button, from here rather than re-entrantly.
+      okcore_run_pending_op();
+    }
     if(initialized && initcheck) {
     #ifdef STD_VERSION
     yubikey_incr_time();
@@ -818,49 +827,14 @@ void payload(int duration) {
         #endif
         CRYPTO_AUTH++;
         return;
-      } else if ((CRYPTO_AUTH == 3 && button_selected==Challenge_button3 && isfade && packet_buffer_details[0]) || (derived_key_challenge_mode==1 && isfade && packet_buffer_details[0]) || (stored_key_challenge_mode==1 && isfade && packet_buffer_details[0]) || (CRYPTO_AUTH == 3 && packet_buffer_details[0] == OKHMAC && isfade) || (packet_buffer_details[0] == OKWEBAUTHN && isfade)) {
+      } else if ((CRYPTO_AUTH == 3 && button_selected==Challenge_button3 && isfade && packet_buffer_details[0]) || (user_input_mode==USER_INPUT_PRESS && CRYPTO_AUTH && isfade && packet_buffer_details[0]) || (CRYPTO_AUTH == 3 && packet_buffer_details[0] == OKHMAC && isfade) || (packet_buffer_details[0] == OKWEBAUTHN && isfade)) {
         #ifdef DEBUG
         Serial.print("Challenge3 entered");
         Serial.println(button_selected-'0');
         #endif
         CRYPTO_AUTH = 4;
-        derived_key_challenge_mode = 0;
-        stored_key_challenge_mode = 0;
-        if(packet_buffer_details[0] == OKSIGN) {
-          recv_buffer[4] = packet_buffer_details[0];
-          recv_buffer[5] = packet_buffer_details[1];
-          okcrypto_sign(recv_buffer);
-        } else if (packet_buffer_details[0] == OKDECRYPT) {
-          recv_buffer[4] = packet_buffer_details[0];
-          recv_buffer[5] = packet_buffer_details[1];
-          okcrypto_decrypt(recv_buffer);
-        } else if (packet_buffer_details[0] == OKHMAC) {
-          okcrypto_hmacsha1();
-        } else if (packet_buffer_details[0] == OKWEBAUTHN) {
-          u2f_button = 1;
-          unsigned long u2fwait = millis() + 4000;
-          while(u2f_button && millis() < u2fwait) {
-          recvmsg(0);
-          }
-          u2f_button = 0;
-        } else if (packet_buffer_details[0] == OKSETPRIV) {
-          // PQC (X-Wing/ML-KEM) keygen confirmation: ecc_priv_flash() primed
-          // this challenge via process_packets(), which encrypted the
-          // [keytype, 0xFF x8] trigger payload into large_buffer (see
-          // done_process_packets()) - decrypt it back, rebuild recv_buffer in
-          // the layout set_private()/ecc_priv_flash() expect (buffer[6]=keytype,
-          // buffer[7..]=trigger bytes), and re-run it now that CRYPTO_AUTH==4.
-          okcore_aes_gcm_decrypt(large_buffer, packet_buffer_details[0], packet_buffer_details[1], profilekey, large_buffer_offset);
-          recv_buffer[4] = packet_buffer_details[0];
-          recv_buffer[5] = packet_buffer_details[1];
-          recv_buffer[6] = large_buffer[0];
-          memcpy(recv_buffer + 7, large_buffer + 1, large_buffer_offset - 1);
-          set_private(recv_buffer);
-        }
-          CRYPTO_AUTH = 0;
-          packet_buffer_details[0]=0;
-          fadeoff(0);
-          return;
+        okcore_run_pending_op(); // dispatch shared with the no-press path (okcore.cpp)
+        return;
         } else if (CRYPTO_AUTH) { //Wrong challenge was entered
             CRYPTO_AUTH = 0;
             Challenge_button1 = 0;
