@@ -433,6 +433,10 @@ void setup() {
     stored_key_challenge_mode = USER_INPUT_PRESS;
     okeeprom_eeset_derived_key_challenge_mode(&derived_key_challenge_mode); 
     okeeprom_eeset_stored_key_challenge_mode(&stored_key_challenge_mode);
+    // Web derived keys: no press by default - press-free per-site derivation
+    // is the OnlyAgent feature. Users opt into press / challenge code in the App.
+    uint8_t webmode = USER_INPUT_NONE;
+    okeeprom_eeset_web_derive_mode(&webmode);
   } 
   
   if (onlykeyhw==OK_HW_DUO) {
