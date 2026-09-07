@@ -121,7 +121,16 @@ extern uint8_t profilemode;
 #include "AES.h"
 #include "GCM.h"
 #include "rsa.h"
-#include "tweetnacl.h"
+#include "tweetnacl.h" // still linked for crypto_box (XSalsa20); listed here so Arduino 1.6.5 adds the library to the build
+#include "SHA512.h" // Crypto library SHA-512 (the same one Ed25519 uses) for the firmware hash chain
+#define FW_HASH_BYTES 64
+// SHA-512 one-shot; replaces tweetnacl's crypto_hash so the firmware links one SHA-512.
+static void fw_sha512(uint8_t *out, const uint8_t *msg, size_t len) {
+  SHA512 h;
+  h.reset();
+  h.update(msg, len);
+  h.finalize(out, FW_HASH_BYTES);
+}
 /*************************************/
 //FIDO2 Libraries
 /*************************************/
@@ -346,7 +355,7 @@ void setup() {
     //create hash of firmware in hash buffer
     #ifdef STD_VERSION
     fw_hash(ctap_buffer); 
-    for (int i = 0; i < crypto_hash_BYTES; i++) { //write 64byte hash to eeprom
+    for (int i = 0; i < FW_HASH_BYTES; i++) { //write 64byte hash to eeprom
       eeprom_write_byte((unsigned char*)(2+i), ctap_buffer[i]); // 2-65 used for fw integrity hash
     }
     memset(ctap_buffer, 0, 2048);
@@ -1427,11 +1436,11 @@ void fw_hash(unsigned char* hashptr) {
    while (adr <= 0x36060) { //13 blocks of 16384 bytes, last block 0x36060 - 0x3A060
      okcore_flashget_common (smesg, (unsigned long*)adr, 16384); //Read each block
      if (adr == (unsigned long)fwstartadr) { 
-       crypto_hash(hashptr,smesg,16384); //hash this block
+       fw_sha512(hashptr,smesg,16384); //hash this block
      }
      else { //if not first block, hash with previous block hash
-     memcpy(smesg + 16384, hashptr, crypto_hash_BYTES);
-     crypto_hash(hashptr,smesg,(16384+crypto_hash_BYTES)); 
+     memcpy(smesg + 16384, hashptr, FW_HASH_BYTES);
+     fw_sha512(hashptr,smesg,(16384+FW_HASH_BYTES)); 
      }
      adr = adr + 16384;
   }
