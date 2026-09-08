@@ -723,17 +723,6 @@ void payload(int duration) {
       
       wipe_usb_buffer(); // Wipe old responses
       return;
-    } else if (!initialized && duration >= 85 && button_selected=='1') {
-      if (onlykeyhw==OK_HW_DUO) okcore_quick_setup(KEYBOARD_ONLYKEY_DUO_NO_BACKUP);
-      else okcore_quick_setup(KEYBOARD_MANUAL_PIN_SET);
-      return;
-    } else if (!initialized && duration >= 85 && button_selected=='2') {
-      if (onlykeyhw==OK_HW_DUO) okcore_quick_setup(KEYBOARD_ONLYKEY_DUO_BACKUP);
-      else okcore_quick_setup(KEYBOARD_AUTO_PIN_SET);
-      return;
-    } else if (!initialized && duration >= 85 && button_selected=='3') {
-      okcore_quick_setup(0); //Setup with keyboard prompt
-      return;
     } else if (pin_set==0 && !initcheck) {
       return;
     }
@@ -774,11 +763,6 @@ void payload(int duration) {
           blink(1);
           NEO_Color = 1;
         }
-        return;
-    } else if (pin_set==10) {
-        cancelfadeoffafter20();
-        if (button_selected=='1') okcore_quick_setup(KEYBOARD_MANUAL_PIN_SET); //Manual
-        else okcore_quick_setup(KEYBOARD_AUTO_PIN_SET); //Manual
         return;
     }
     Keyboard.begin();
