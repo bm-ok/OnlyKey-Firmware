@@ -121,6 +121,12 @@ extern uint8_t profilemode;
 #include "SHA512.h" // Crypto library SHA-512 (the same one Ed25519 uses) for the firmware hash chain
 #define FW_HASH_BYTES 64
 // SHA-512 one-shot; replaces tweetnacl's crypto_hash so the firmware links one SHA-512.
+// The Teensy core's weak yield() polls Serial1/2/3 for serialEvent hooks the
+// firmware never defines, and that single reference linked all three UART
+// drivers (~4 KB). Override it with a no-op: nothing here uses hardware
+// serial, and delay() calling an empty yield() is harmless.
+void yield(void) {}
+
 static void fw_sha512(uint8_t *out, const uint8_t *msg, size_t len) {
   SHA512 h;
   h.reset();
