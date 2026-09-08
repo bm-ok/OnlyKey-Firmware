@@ -79,12 +79,9 @@
 //Firmware Build Options
 /*************************************/
 #define DEBUG //Enable Serial Monitor, debug firmware
-#define STD_VERSION //Define for STD edition firmare, undefine for IN TRVL edition firmware
+// STD_VERSION: the International Travel Edition (a build with no crypto) is retired; there is one edition now and the old #ifdef STD_VERSION branches were resolved in place.
 #define OK_Color //Define for hardware with color LED
 //#define FACTORYKEYS2 // Attestation key and other keys encrypted using CHIP ID and RNG for unique per device
-#ifndef STD_VERSION
-#undef FACTORYKEYS2
-#endif
 /*************************************/
 //Standard Libraries 
 /*************************************/
@@ -110,10 +107,9 @@
 #endif
 /*************************************/
 //Additional Libraries to Load for STD firmware version
-//These libraries will only be used if STD_VERSION is defined
+//Crypto/FIDO2 libraries (always built now that the Travel Edition is retired)
 /*************************************/
 extern uint8_t profilemode;
-#ifdef STD_VERSION
 #define OKSOLO //Using FIDO2 from SOLO
 #include "yksim.h"
 #include "uECC.h"
@@ -148,7 +144,6 @@ static void fw_sha512(uint8_t *out, const uint8_t *msg, size_t len) {
 #include "ok_extension.h"
 #include "crypto.h"
 #include "u2f.h"
-#endif
 #endif
 /*************************************/
 //LED Assignments
@@ -241,9 +236,7 @@ extern int large_buffer_offset;
 char keybuffer[EElen_url+EElen_addchar+EElen_delay+EElen_addchar+EElen_username+EElen_delay+EElen_addchar+EElen_password+EElen_addchar+EElen_2FAtype+64+EElen_addchar+EElen_addchar+10]; //Buffer to hold all keystrokes
 char *pos;
 extern uint8_t isfade;
-#ifdef STD_VERSION
 extern uint8_t ctap_buffer[CTAPHID_BUFFER_SIZE];
-#endif
 extern uint8_t pending_operation;
 uint8_t modkey;
 extern uint8_t onlykeyhw;
@@ -265,11 +258,7 @@ void setup() {
   #ifdef DEBUG
   Serial.begin(9600);
   #endif
-  #ifdef STD_VERSION
   profilemode = STDPROFILE1;
-  #else
-  profilemode = NONENCRYPTEDPROFILE; 
-  #endif
   /*************************************/
   //PIN Assigments
   /*************************************/
@@ -353,13 +342,11 @@ void setup() {
     #endif // end FACTORYKEYS
     // 2) Store factory firmware hash for integrity verification
     //create hash of firmware in hash buffer
-    #ifdef STD_VERSION
     fw_hash(ctap_buffer); 
     for (int i = 0; i < FW_HASH_BYTES; i++) { //write 64byte hash to eeprom
       eeprom_write_byte((unsigned char*)(2+i), ctap_buffer[i]); // 2-65 used for fw integrity hash
     }
     memset(ctap_buffer, 0, 2048);
-    #endif
     // 3) Enable flash security after writing
     int nn = 0;
     nn=flashSecurityLockBits();
@@ -478,14 +465,6 @@ void checkKey(Task* me) {
     }
   }
 
-  #ifndef STD_VERSION
-  // Disable OK_HW_DUO hardware for IN_TRVL firmware
-  if (onlykeyhw==OK_HW_DUO) {
-    eeprom_write_byte(0x00, 1); //Go to bootloader
-    eeprom_write_byte((unsigned char *)0x01, 1); //Firmware ready to load
-    CPU_RESTART(); //Reboot
-  }
-  #endif
 
   if (setBuffer[8] == 1 && (!isfade || configmode)) //Done receiving packets
   {                 
@@ -504,9 +483,7 @@ void checkKey(Task* me) {
       okcore_run_pending_op();
     }
     if(initialized && initcheck) {
-    #ifdef STD_VERSION
     yubikey_incr_time();
-    #endif
     if (TIMEOUT[0] && idletimer >= (TIMEOUT[0]*60000)) {
       unlocked = false;
       firsttime = true;
@@ -585,8 +562,6 @@ void sendKey(Task* me) {
         pos++;
     }
     else if ((uint8_t)*pos == 9) {
-        if(profilemode==NONENCRYPTEDPROFILE) return;
-        #ifdef STD_VERSION
         #ifdef DEBUG
         Serial.println("Starting U2F...");
         #endif
@@ -599,7 +574,6 @@ void sendKey(Task* me) {
         Keyboard.end();
         SoftTimer.remove(&taskKB);
         SoftTimer.add(&taskKey);
-        #endif
         return;
     }
     else if ((uint8_t)*pos >= 10 && (uint8_t)*pos <= 31) {
@@ -729,13 +703,10 @@ void payload(int duration) {
       #endif      
       fadeon(NEO_Color);
       fadeoff(85);  
-      if (profilemode!=NONENCRYPTEDPROFILE) {
-        #ifdef STD_VERSION
-        U2Finit();
-        { uint8_t zero = 0; okeeprom_eeset_sincelastregularlogin(&zero); } //Set failed logins since last regular login to 0
-        fw_version_changes();
-        #endif
-      }
+    U2Finit();
+    { uint8_t zero = 0; okeeprom_eeset_sincelastregularlogin(&zero); } //Set failed logins since last regular login to 0
+    fw_version_changes();
+  
       idletimer=0;
       unlocked = true;
       if (configmode) {
@@ -752,15 +723,15 @@ void payload(int duration) {
       
       wipe_usb_buffer(); // Wipe old responses
       return;
-    } else if (!initialized && duration >= 85 && button_selected=='1' && profilemode!=NONENCRYPTEDPROFILE) {
+    } else if (!initialized && duration >= 85 && button_selected=='1') {
       if (onlykeyhw==OK_HW_DUO) okcore_quick_setup(KEYBOARD_ONLYKEY_DUO_NO_BACKUP);
       else okcore_quick_setup(KEYBOARD_MANUAL_PIN_SET);
       return;
-    } else if (!initialized && duration >= 85 && button_selected=='2' && profilemode!=NONENCRYPTEDPROFILE) {
+    } else if (!initialized && duration >= 85 && button_selected=='2') {
       if (onlykeyhw==OK_HW_DUO) okcore_quick_setup(KEYBOARD_ONLYKEY_DUO_BACKUP);
       else okcore_quick_setup(KEYBOARD_AUTO_PIN_SET);
       return;
-    } else if (!initialized && duration >= 85 && button_selected=='3' && profilemode!=NONENCRYPTEDPROFILE) {
+    } else if (!initialized && duration >= 85 && button_selected=='3') {
       okcore_quick_setup(0); //Setup with keyboard prompt
       return;
     } else if (pin_set==0 && !initcheck) {
@@ -793,14 +764,11 @@ void payload(int duration) {
         return;
     }
     else if (pin_set<=9) {
-        if(profilemode!=NONENCRYPTEDPROFILE){
-        #ifdef STD_VERSION
-        #ifdef DEBUG
-        Serial.print("2nd profile password appended with ");
-        Serial.println(button_selected-'0');
-        #endif
-        #endif
-        }
+    #ifdef DEBUG
+    Serial.print("2nd profile password appended with ");
+    Serial.println(button_selected-'0');
+    #endif
+    
         if (configmode) {
           NEO_Color = 45;
           blink(1);
@@ -820,96 +788,93 @@ void payload(int duration) {
     Serial.println(button_selected-'0');
     #endif
     idletimer=0;
-    if (profilemode!=NONENCRYPTEDPROFILE) {
-      #ifdef STD_VERSION
-      if (CRYPTO_AUTH == 1 && button_selected==Challenge_button1 && isfade) {
-          #ifdef DEBUG
-          Serial.print("Challenge1 entered");
-          Serial.println(button_selected-'0');
-          #endif
-          CRYPTO_AUTH++;
-          return;
-      } else if (CRYPTO_AUTH == 2 && button_selected==Challenge_button2 && isfade) {
-        #ifdef DEBUG
-        Serial.print("Challenge2 entered");
-        Serial.println(button_selected-'0');
-        #endif
-        CRYPTO_AUTH++;
+  if (CRYPTO_AUTH == 1 && button_selected==Challenge_button1 && isfade) {
+      #ifdef DEBUG
+      Serial.print("Challenge1 entered");
+      Serial.println(button_selected-'0');
+      #endif
+      CRYPTO_AUTH++;
+      return;
+  } else if (CRYPTO_AUTH == 2 && button_selected==Challenge_button2 && isfade) {
+    #ifdef DEBUG
+    Serial.print("Challenge2 entered");
+    Serial.println(button_selected-'0');
+    #endif
+    CRYPTO_AUTH++;
+    return;
+  } else if ((CRYPTO_AUTH == 3 && button_selected==Challenge_button3 && isfade && packet_buffer_details[0]) || (user_input_mode==USER_INPUT_PRESS && CRYPTO_AUTH && isfade && packet_buffer_details[0]) || (CRYPTO_AUTH == 3 && packet_buffer_details[0] == OKHMAC && isfade) || (packet_buffer_details[0] == OKWEBAUTHN && isfade)) {
+    #ifdef DEBUG
+    Serial.print("Challenge3 entered");
+    Serial.println(button_selected-'0');
+    #endif
+    CRYPTO_AUTH = 4;
+    okcore_run_pending_op(); // dispatch shared with the no-press path (okcore.cpp)
+    return;
+    } else if (CRYPTO_AUTH) { //Wrong challenge was entered
+        CRYPTO_AUTH = 0;
+        Challenge_button1 = 0;
+        Challenge_button2 = 0;
+        Challenge_button3 = 0;
+        fadeoff(1);
+        hidprint("Error incorrect challenge was entered");
+        analogWrite(BLINKPIN, 255); //LED ON
         return;
-      } else if ((CRYPTO_AUTH == 3 && button_selected==Challenge_button3 && isfade && packet_buffer_details[0]) || (user_input_mode==USER_INPUT_PRESS && CRYPTO_AUTH && isfade && packet_buffer_details[0]) || (CRYPTO_AUTH == 3 && packet_buffer_details[0] == OKHMAC && isfade) || (packet_buffer_details[0] == OKWEBAUTHN && isfade)) {
-        #ifdef DEBUG
-        Serial.print("Challenge3 entered");
-        Serial.println(button_selected-'0');
-        #endif
-        CRYPTO_AUTH = 4;
-        okcore_run_pending_op(); // dispatch shared with the no-press path (okcore.cpp)
+    } else if (duration < 180 && duration >= 72 && button_selected=='1' && !isfade) {
+        // Backup <4 sec 
+        SoftTimer.remove(&taskKey);
+        backup();
+        SoftTimer.add(&taskKey);
         return;
-        } else if (CRYPTO_AUTH) { //Wrong challenge was entered
-            CRYPTO_AUTH = 0;
-            Challenge_button1 = 0;
-            Challenge_button2 = 0;
-            Challenge_button3 = 0;
-            fadeoff(1);
-            hidprint("Error incorrect challenge was entered");
-            analogWrite(BLINKPIN, 255); //LED ON
-            return;
-        } else if (duration < 180 && duration >= 72 && button_selected=='1' && !isfade) {
-            // Backup <4 sec 
-            SoftTimer.remove(&taskKey);
-            backup();
-            SoftTimer.add(&taskKey);
-            return;
-        } else if (onlykeyhw==OK_HW_DUO && duration >= 360 && button_selected=='2' && configmode==true) {
-          factorydefault();
-        } else if (duration >= 72 && button_selected=='2' && !isfade) {
-            // Slot Labels <4 sec 
-            get_slot_labels(1);
-            if (duration >= 140) get_key_labels(1);
-            return;
-        } else if (duration >= 72 && button_selected=='3' && !isfade) {
-            // Lock and/or switch profiles <4 sec
-            if (onlykeyhw==OK_HW_DUO && duration < 180) {
-              if (Duo_config[1] == 0){ // Profile 1
-                Profile_Offset = 84; //Profile 2 Blue
-                Duo_config[1] = 1;
-              } else if (Duo_config[1] == 1){ // Profile 2 
-                Profile_Offset = -42; //Profile 3 Yellow
-                Duo_config[1] = 2;
-              } else if (Duo_config[1] == 2){ // Profile 3
-                Profile_Offset = 128; //Profile 4 Purple
-                Duo_config[1] = 3;
-              } else if (Duo_config[1] == 3){ // Profile 4
-                Profile_Offset = 0; //Profile 1 Green
-                Duo_config[1] = 0;
-              }
-              return;
-            }
-            unlocked = false;
-            firsttime = true;
-            password.reset(); //reset the guessed password to NULL
-            pass_keypress=1;
-            memset(profilekey, 0, 32);        
-            SoftTimer.add(&taskInitialized);
-            button_selected=0;
-            CPU_RESTART(); 
-            return;
-        } 
-        else if (((onlykeyhw==OK_HW_DUO && duration >= 180 && button_selected=='1') || (onlykeyhw!=OK_HW_DUO && duration >= 72 && button_selected=='6')) && !isfade) {
-          // Config mode 
-          integrityctr1++;
-          configmode=true;
-          if (Duo_config[0]!=1) {
-            unlocked = false;
-            firsttime = true;
-            password.reset(); //reset the guessed password to NULL
-            pass_keypress=1;
-            SoftTimer.add(&taskInitialized);
+    } else if (onlykeyhw==OK_HW_DUO && duration >= 360 && button_selected=='2' && configmode==true) {
+      factorydefault();
+    } else if (duration >= 72 && button_selected=='2' && !isfade) {
+        // Slot Labels <4 sec 
+        get_slot_labels(1);
+        if (duration >= 140) get_key_labels(1);
+        return;
+    } else if (duration >= 72 && button_selected=='3' && !isfade) {
+        // Lock and/or switch profiles <4 sec
+        if (onlykeyhw==OK_HW_DUO && duration < 180) {
+          if (Duo_config[1] == 0){ // Profile 1
+            Profile_Offset = 84; //Profile 2 Blue
+            Duo_config[1] = 1;
+          } else if (Duo_config[1] == 1){ // Profile 2 
+            Profile_Offset = -42; //Profile 3 Yellow
+            Duo_config[1] = 2;
+          } else if (Duo_config[1] == 2){ // Profile 3
+            Profile_Offset = 128; //Profile 4 Purple
+            Duo_config[1] = 3;
+          } else if (Duo_config[1] == 3){ // Profile 4
+            Profile_Offset = 0; //Profile 1 Green
+            Duo_config[1] = 0;
           }
-          integrityctr2++;
           return;
         }
-      #endif
-     }
+        unlocked = false;
+        firsttime = true;
+        password.reset(); //reset the guessed password to NULL
+        pass_keypress=1;
+        memset(profilekey, 0, 32);        
+        SoftTimer.add(&taskInitialized);
+        button_selected=0;
+        CPU_RESTART(); 
+        return;
+    } 
+    else if (((onlykeyhw==OK_HW_DUO && duration >= 180 && button_selected=='1') || (onlykeyhw!=OK_HW_DUO && duration >= 72 && button_selected=='6')) && !isfade) {
+      // Config mode 
+      integrityctr1++;
+      configmode=true;
+      if (Duo_config[0]!=1) {
+        unlocked = false;
+        firsttime = true;
+        password.reset(); //reset the guessed password to NULL
+        pass_keypress=1;
+        SoftTimer.add(&taskInitialized);
+      }
+      integrityctr2++;
+      return;
+    }
+ 
     #ifdef OK_Color
     setcolor(0); // NEO Pixel OFF
     #else
@@ -1296,26 +1261,22 @@ void process_slot(int s) {
           index=index+6;
           memset(temp, 0, 64); //Wipe all data from buffer
         }
-        if(temp[0] == MFAOLDYUBIOTP && profilemode!=NONENCRYPTEDPROFILE) {
+        if(temp[0] == MFAOLDYUBIOTP) {
           #ifdef DEBUG
           Serial.println("Generating Yubico OTP Legacy...");
           #endif
-          #ifdef STD_VERSION
           yubikeysim(keybuffer + index, 0);
           index=index+44;
-          #endif
         }
-        if((temp[0] == MFAYUBIOTPandHMACSHA1 || temp[0] == MFAYUBIOTP) && profilemode!=NONENCRYPTEDPROFILE) {
+        if((temp[0] == MFAYUBIOTPandHMACSHA1 || temp[0] == MFAYUBIOTP)) {
           #ifdef DEBUG
           Serial.println("Generating Yubico OTP...");
           #endif
-          #ifdef STD_VERSION
           int publen;
           publen = yubikeysim(keybuffer + index, slot);
           index=index+32+(publen*2);
-          #endif
         }
-        if(temp[0] == MFAOLDU2F && profilemode!=NONENCRYPTEDPROFILE) { //U2F
+        if(temp[0] == MFAOLDU2F) { //U2F
           keybuffer[index] = 9;
           index++;
         }
@@ -1429,7 +1390,6 @@ void lock_ok_and_screen () {
 }
 
 void fw_hash(unsigned char* hashptr) {
-  #ifdef STD_VERSION
    unsigned char smesg[17000];
    unsigned long adr = fwstartadr;
    //Hash current fw in hashptr   
@@ -1445,7 +1405,6 @@ void fw_hash(unsigned char* hashptr) {
      adr = adr + 16384;
   }
   return;
-  #endif
 }
 
 void keymap_press (char key) {
