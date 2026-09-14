@@ -435,10 +435,23 @@ void setup() {
     stored_key_challenge_mode = USER_INPUT_PRESS;
     okeeprom_eeset_derived_key_challenge_mode(&derived_key_challenge_mode); 
     okeeprom_eeset_stored_key_challenge_mode(&stored_key_challenge_mode);
-    // Web derived keys: button press by default; users opt into no press
-    // (press-free per-site derivation) or challenge code in the App.
+    // Web and agent derived keys (slot 128, used by the OnlyKey app over FIDO2
+    // AND by local agents over USB): button press by default. Users opt into no
+    // press - for an unattended agent - or a challenge code, in the App.
     uint8_t webmode = USER_INPUT_PRESS;
-    okeeprom_eeset_web_derive_mode(&webmode);
+    okeeprom_eeset_web_agent_derive_mode(&webmode);
+    // Webcrypt policy (field 31): both bits off - derived keys yes, stored-key
+    // PGP over FIDO2 no, extension enabled.
+    //
+    // Written explicitly rather than left erased, even though 0 is also what an
+    // unwritten byte resolves to. okcore_webcrypt_policy() treats 0xFF as "this
+    // device predates field 31" and falls back to reading the legacy meaning out
+    // of field 21, and okcore_user_input_mode_for_slot() refuses field 21 value
+    // 2 while that fallback is live. A device being initialised here has no
+    // legacy state to inherit, so marking it split-aware from birth keeps the
+    // upgrade rules pointed at devices that actually need them.
+    uint8_t wcpolicy = 0;
+    okeeprom_eeset_webcrypt_policy(&wcpolicy);
   } 
   
   if (onlykeyhw==OK_HW_DUO) {
