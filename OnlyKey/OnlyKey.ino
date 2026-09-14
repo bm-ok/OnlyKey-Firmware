@@ -78,7 +78,10 @@
 /*************************************/
 //Firmware Build Options
 /*************************************/
-#define DEBUG //Enable Serial Monitor, debug firmware
+// DEBUG (and the other build options) live in the onlykey library's onlykey.h,
+// which this file includes below - that header is the single production switch.
+// Do not re-define DEBUG here: it would cover only this translation unit and
+// mask the real switch, so turning DEBUG off in onlykey.h would appear to do nothing.
 // STD_VERSION: the International Travel Edition (a build with no crypto) is retired; there is one edition now and the old #ifdef STD_VERSION branches were resolved in place.
 #define OK_Color //Define for hardware with color LED
 //#define FACTORYKEYS2 // Attestation key and other keys encrypted using CHIP ID and RNG for unique per device
