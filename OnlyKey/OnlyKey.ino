@@ -816,13 +816,52 @@ void payload(int duration) {
     CRYPTO_AUTH = 4;
     okcore_run_pending_op(); // dispatch shared with the no-press path (okcore.cpp)
     return;
-    } else if (CRYPTO_AUTH) { //Wrong challenge was entered
+    } else if (CRYPTO_AUTH) { //Confirmation failed - say which way
+        /* This branch is every way a confirmation can fail, and it used to
+         * report all of them as "Error incorrect challenge was entered".
+         *
+         * Reaching here means CRYPTO_AUTH is non-zero and none of the three
+         * accept branches above matched, which happens in three quite
+         * different situations:
+         *
+         *   - the wrong button, inside the window. The message was right.
+         *   - the right button, but AFTER the window closed. isfade has gone
+         *     false, so every accept branch fails on that term alone and the
+         *     user is told their correct entry was incorrect.
+         *   - press mode (USER_INPUT_PRESS), where no challenge exists at all.
+         *     okcore_prime_user_confirmation() arms at CRYPTO_AUTH = 3 and
+         *     leaves Challenge_button1/2/3 at 0, so a press that lands late
+         *     names a challenge the user was never asked for and could not
+         *     have got wrong.
+         *
+         * The timeout message that would have been honest for the second and
+         * third cases cannot fire either: fadeoffafter20sec() only prints it
+         * while pending_operation is still OKDECRYPT_ERR_USER_ACTION_PENDING
+         * or OKSIGN_ERR_USER_ACTION_PENDING, and advancing past the first
+         * digit moves it to CTAP2_ERR_USER_ACTION_PENDING.
+         *
+         * So three states collapsed into one message that named only the
+         * first, and the host has nothing else to go on - onlykey-3rd-party.js
+         * even carries a TRANSIENT_DEVICE_ERROR regex for this exact string
+         * because it cannot tell a real wrong entry from the others. A day was
+         * lost to that on 2026-09-16, and the press-mode case was mistaken for
+         * a wrong entry again on 2026-09-21.
+         *
+         * Same failure, same cleanup, three accurate messages. */
+        uint8_t was_press_mode = (user_input_mode == USER_INPUT_PRESS);
+        uint8_t window_closed = !isfade;
         CRYPTO_AUTH = 0;
         Challenge_button1 = 0;
         Challenge_button2 = 0;
         Challenge_button3 = 0;
         fadeoff(1);
-        hidprint("Error incorrect challenge was entered");
+        if (window_closed) {
+            hidprint("Error confirmation window closed before the button was pressed");
+        } else if (was_press_mode) {
+            hidprint("Error button press was not accepted");
+        } else {
+            hidprint("Error incorrect challenge was entered");
+        }
         analogWrite(BLINKPIN, 255); //LED ON
         return;
     } else if (duration < 180 && duration >= 72 && button_selected=='1' && !isfade) {
